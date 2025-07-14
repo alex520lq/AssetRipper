@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets.Bundles;
+using AssetRipper.Assets.Bundles;
 using AssetRipper.Export.UnityProjects.Configuration;
 using AssetRipper.Export.UnityProjects.PathIdMapping;
 using AssetRipper.Export.UnityProjects.Project;
@@ -60,6 +60,7 @@ public class ExportHandler
 		yield return new AttributePolyfillGenerator();
 		yield return new MonoExplicitPropertyRepairProcessor();
 		yield return new ObfuscationRepairProcessor();
+		yield return new CompilerGeneratedTypeRemovalProcessor();
 		yield return new ForwardingAssemblyGenerator();
 		if (Settings.ImportSettings.ScriptContentLevel == ScriptContentLevel.Level1)
 		{
