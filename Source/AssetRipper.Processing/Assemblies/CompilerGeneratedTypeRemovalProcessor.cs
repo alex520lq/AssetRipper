@@ -16,7 +16,7 @@ public sealed class CompilerGeneratedTypeRemovalProcessor : IAssetProcessor
 		manager.ClearStreamCache();
 		
 		RemoveCompilerGeneratedStateMachineTypes(manager);
-		RemoveAsyncStateMachineAttributes(manager);
+		RemoveAsyncAndIteratorStateMachineAttributes(manager);
 	}
 	
 	/// <summary>
@@ -124,35 +124,42 @@ public sealed class CompilerGeneratedTypeRemovalProcessor : IAssetProcessor
 	}
 	
 	/// <summary>
-	/// 移除方法上引用已删除状态机类型的 AsyncStateMachine 属性
+	/// 移除方法上引用已删除状态机类型的 AsyncStateMachine 和 IteratorStateMachine 属性
 	/// </summary>
-	private static void RemoveAsyncStateMachineAttributes(IAssemblyManager manager)
+	private static void RemoveAsyncAndIteratorStateMachineAttributes(IAssemblyManager manager)
 	{
 		foreach (TypeDefinition type in manager.GetAllTypes())
 		{
 			foreach (MethodDefinition method in type.Methods)
 			{
-				RemoveAsyncStateMachineAttributesFromMethod(method);
+				RemoveAsyncAndIteratorStateMachineAttributesFromMethod(method);
 			}
 		}
 	}
-	
+
 	/// <summary>
-	/// 从方法中移除 AsyncStateMachine 属性
+	/// 从方法中移除 AsyncStateMachine 和 IteratorStateMachine 属性
 	/// </summary>
-	private static void RemoveAsyncStateMachineAttributesFromMethod(MethodDefinition method)
+	private static void RemoveAsyncAndIteratorStateMachineAttributesFromMethod(MethodDefinition method)
 	{
 		for (int i = method.CustomAttributes.Count - 1; i >= 0; i--)
 		{
 			CustomAttribute attribute = method.CustomAttributes[i];
-			if (IsAsyncStateMachineAttribute(attribute))
+			if (IsAsyncStateMachineAttribute(attribute) || IsIteratorStateMachineAttribute(attribute))
 			{
-				// 总是移除 AsyncStateMachine 属性，因为我们已经移除了所有编译器生成的状态机类型
 				method.CustomAttributes.RemoveAt(i);
 			}
 		}
 	}
-	
+
+	/// <summary>
+	/// 检查是否为 IteratorStateMachine 属性
+	/// </summary>
+	private static bool IsIteratorStateMachineAttribute(CustomAttribute attribute)
+	{
+		return attribute.Constructor?.DeclaringType?.Name == "IteratorStateMachineAttribute";
+	}
+
 	/// <summary>
 	/// 检查是否为 AsyncStateMachine 属性
 	/// </summary>
@@ -160,6 +167,6 @@ public sealed class CompilerGeneratedTypeRemovalProcessor : IAssetProcessor
 	{
 		return attribute.Constructor?.DeclaringType?.Name == "AsyncStateMachineAttribute";
 	}
-	
+
 
 }
