@@ -71,13 +71,11 @@ public sealed class ScriptExportCollection : ScriptExportCollectionBase
 		foreach (AssemblyDefinition assembly in AssetExporter.AssemblyManager.GetAssemblies())
 		{
 			string assemblyName = assembly.Name!;
-			if (_dllWhiteList != null && !_dllWhiteList.Contains(assemblyName + ".dll", StringComparer.OrdinalIgnoreCase))
-			{
-				Logger.Debug(LogCategory.Export, $"跳过DLL: {assemblyName}.dll (不在白名单)");
-				continue;
-			}
-			Logger.Debug(LogCategory.Export, $"导出DLL: {assemblyName}.dll");
-			AssemblyExportType exportType = AssetExporter.GetExportType(assemblyName);
+			bool isInWhiteList = _dllWhiteList != null && _dllWhiteList.Contains(assemblyName + ".dll", StringComparer.OrdinalIgnoreCase);
+
+			AssemblyExportType exportType = isInWhiteList
+				? AssemblyExportType.Decompile
+				: AssetExporter.GetExportType(assemblyName);
 
 			if (exportType is AssemblyExportType.Decompile)
 			{
@@ -91,7 +89,7 @@ public sealed class ScriptExportCollection : ScriptExportCollectionBase
 			else if (exportType is AssemblyExportType.Save)
 			{
 				Logger.Info(LogCategory.Export, $"Saving {assemblyName}");
-				fileSystem.Directory.Create(pluginsFolder);
+				fileSystem.Directory.Create(pluginsFolder); // 确保Plugins目录始终创建
 				string outputPath = fileSystem.Path.Join(pluginsFolder, SpecialFileNames.AddAssemblyFileExtension(assemblyName));
 				AssetExporter.AssemblyManager.SaveAssembly(assembly, outputPath, fileSystem);
 				OnAssemblyExported(container, outputPath, fileSystem);

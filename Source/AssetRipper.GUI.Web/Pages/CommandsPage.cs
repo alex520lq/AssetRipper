@@ -82,9 +82,9 @@ public sealed class CommandsPage : VuePage
 									.Close("清空");
 							}
 							
-							// DLL选择容器，添加滚动和样式
+							// DLL选择容器，去除自定义浅色背景和边框，仅保留滚动和间距
 							using (new Div(writer).WithClass("dll-selection-container")
-								       .WithStyle("max-height: 300px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 0.375rem; padding: 0.75rem; background-color: #f8f9fa;")
+								       .WithStyle("max-height: 300px; overflow-y: auto; padding: 0.75rem;")
 								       .End())
 							{
 								foreach (var dllName in sortedAssemblies)
