@@ -30,8 +30,14 @@ public class ScriptExporter : IAssetExporter
 	private bool HasDecompiled { get; set; } = false;
 	private AssetType ExportType { get; }
 	private static long MonoScriptDecompiledFileID { get; } = ExportIdHandler.GetMainExportID((int)ClassIDType.MonoScript);
+	private HashSet<string>? _forceDecompileDlls;
 
-	public bool TryCreateCollection(IUnityObjectBase asset, [NotNullWhen(true)] out IExportCollection? exportCollection)
+	public void SetForceDecompileDlls(IEnumerable<string>? dllNames)
+	{
+		_forceDecompileDlls = dllNames != null ? new HashSet<string>(dllNames, StringComparer.OrdinalIgnoreCase) : null;
+	}
+
+	public bool TryCreateCollection(IUnityObjectBase asset, [NotNullWhen(true)] out IExportCollection? exportCollection, IEnumerable<string>? dllWhiteList = null)
 	{
 		if (asset is IMonoScript script)
 		{
@@ -44,7 +50,7 @@ public class ScriptExporter : IAssetExporter
 				HasDecompiled = true;
 				if (AssemblyManager.IsSet)
 				{
-					exportCollection = new ScriptExportCollection(this, script);
+					exportCollection = new ScriptExportCollection(this, script, dllWhiteList);
 				}
 				else
 				{
@@ -58,6 +64,11 @@ public class ScriptExporter : IAssetExporter
 			exportCollection = null;
 			return false;
 		}
+	}
+
+	public bool TryCreateCollection(IUnityObjectBase asset, out IExportCollection? exportCollection)
+	{
+		return TryCreateCollection(asset, out exportCollection, null);
 	}
 
 	public AssemblyExportType GetExportType(IMonoScript script)
@@ -77,6 +88,10 @@ public class ScriptExporter : IAssetExporter
 
 	public AssemblyExportType GetExportType(string assemblyName)
 	{
+		if (_forceDecompileDlls != null && _forceDecompileDlls.Contains(assemblyName + ".dll"))
+		{
+			return AssemblyExportType.Decompile;
+		}
 		if (ReferenceAssemblyDictionary.ContainsKey(assemblyName))
 		{
 			return AssemblyExportType.Skip;

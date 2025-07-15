@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Primitives;
+using AssetRipper.Import.Logging;
 
 namespace AssetRipper.GUI.Web.Pages;
 
@@ -102,11 +103,43 @@ public static class Commands
 				return CommandsPath;
 			}
 
+			// 验证和解析 dlls 参数
+			IEnumerable<string>? dllNames = null;
+			if (form.TryGetValue("Dlls", out StringValues dllValues))
+			{
+				// 过滤空值并验证格式
+				var validDlls = dllValues
+					.Where(dll => !string.IsNullOrWhiteSpace(dll))
+					.Select(dll => dll.Trim())
+					.Where(dll => dll.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+					.ToList();
+
+				if (validDlls.Count > 0)
+				{
+					dllNames = validDlls;
+					Logger.Info(LogCategory.Export, $"Selected {validDlls.Count} DLLs for export: {string.Join(", ", validDlls)}");
+				}
+				else if (dllValues.Count > 0)
+				{
+					// 有dll参数但都无效
+					Logger.Warning(LogCategory.Export, $"Invalid DLL names provided: {string.Join(", ", dllValues)}");
+				}
+			}
+
 			if (!string.IsNullOrEmpty(path))
 			{
 				bool createSubfolder = TryGetCreateSubfolder(form);
 				path = MaybeAppendTimestampedSubfolder(path, createSubfolder);
-				GameFileLoader.ExportUnityProject(path);
+				
+				try
+				{
+					GameFileLoader.ExportUnityProject(path, dllNames);
+				}
+				catch (Exception ex)
+				{
+					Logger.Error(LogCategory.Export, $"Failed to export Unity project: {ex.Message}");
+					throw;
+				}
 			}
 			return null;
 		}
@@ -133,6 +166,21 @@ public static class Commands
 				bool createSubfolder = TryGetCreateSubfolder(form);
 				path = MaybeAppendTimestampedSubfolder(path, createSubfolder);
 				GameFileLoader.ExportPrimaryContent(path);
+			}
+			return null;
+		}
+	}
+
+	public readonly struct ExportSelectedDlls : ICommand
+	{
+		static async Task<string?> ICommand.Execute(HttpRequest request)
+		{
+			IFormCollection form = await request.ReadFormAsync();
+			string? path = form["Path"];
+			var dlls = form["Dlls"];
+			if (!string.IsNullOrEmpty(path) && dlls.Count > 0)
+			{
+				GameFileLoader.ExportSelectedDlls(dlls, path);
 			}
 			return null;
 		}

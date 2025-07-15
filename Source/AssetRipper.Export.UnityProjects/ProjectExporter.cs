@@ -3,6 +3,8 @@ using AssetRipper.Assets.Bundles;
 using AssetRipper.Import.Configuration;
 using AssetRipper.Import.Logging;
 using AssetRipper.SourceGenerated;
+using AssetRipper.Import.Structure.Assembly;
+using AssetRipper.Import.Structure.Assembly.Managers;
 
 namespace AssetRipper.Export.UnityProjects;
 
@@ -15,6 +17,7 @@ public sealed partial class ProjectExporter
 	public event Action? EventExportFinished;
 
 	private readonly ObjectHandlerStack<IAssetExporter> assetExporterStack = new();
+	private readonly IAssemblyManager _assemblyManager;
 
 	//Exporters
 	private DummyAssetExporter DummyExporter { get; } = new DummyAssetExporter();
@@ -65,22 +68,32 @@ public sealed partial class ProjectExporter
 		throw new NotSupportedException($"There is no exporter that know {nameof(AssetType)} for unknown asset '{type}'");
 	}
 
-	private IExportCollection CreateCollection(IUnityObjectBase asset)
+	private IExportCollection CreateCollection(IUnityObjectBase asset, IEnumerable<string>? dllNames = null)
 	{
 		foreach (IAssetExporter exporter in assetExporterStack.GetHandlerStack(asset.GetType()))
 		{
-			if (exporter.TryCreateCollection(asset, out IExportCollection? collection))
+			if (asset is AssetRipper.SourceGenerated.Classes.ClassID_115.IMonoScript && exporter is Scripts.ScriptExporter scriptExporter)
 			{
-				return collection;
+				if (scriptExporter.TryCreateCollection(asset, out IExportCollection? collection, dllNames))
+				{
+					return collection;
+				}
+			}
+			else
+			{
+				if (exporter.TryCreateCollection(asset, out IExportCollection? collection))
+				{
+					return collection;
+				}
 			}
 		}
 		throw new Exception($"There is no exporter that can handle '{asset}'");
 	}
 
-	public void Export(GameBundle fileCollection, CoreConfiguration options, FileSystem fileSystem)
+	public void Export(GameBundle fileCollection, CoreConfiguration options, FileSystem fileSystem, IEnumerable<string>? dllNames)
 	{
 		EventExportPreparationStarted?.Invoke();
-		List<IExportCollection> collections = CreateCollections(fileCollection);
+		List<IExportCollection> collections = CreateCollections(fileCollection, dllNames);
 		EventExportPreparationFinished?.Invoke();
 
 		EventExportStarted?.Invoke();
@@ -107,21 +120,83 @@ public sealed partial class ProjectExporter
 		EventExportFinished?.Invoke();
 	}
 
-	private List<IExportCollection> CreateCollections(GameBundle fileCollection)
+	private List<IExportCollection> CreateCollections(GameBundle fileCollection, IEnumerable<string>? dllNames)
 	{
 		List<IExportCollection> collections = new();
 		HashSet<IUnityObjectBase> queued = new();
+
+		// 统一dllNames为List<string>，便于多次查找
+		List<string>? dllList = dllNames?.ToList();
 
 		foreach (IUnityObjectBase asset in fileCollection.FetchAssets())
 		{
 			if (!queued.Contains(asset))
 			{
-				IExportCollection collection = CreateCollection(asset);
+				// 只收集属于白名单dll的脚本集合
+				if (dllList != null && asset is AssetRipper.SourceGenerated.Classes.ClassID_115.IMonoScript monoScript)
+				{
+					string asmName = monoScript.GetAssemblyNameFixed();
+					string dllName = asmName + ".dll";
+					if (!dllList.Contains(dllName))
+					{
+						continue;
+					}
+				}
+				IExportCollection collection = CreateCollection(asset, dllList);
 				foreach (IUnityObjectBase element in collection.Assets)
 				{
 					queued.Add(element);
 				}
 				collections.Add(collection);
+			}
+		}
+
+		// 补充：确保所有白名单DLL都能被收集并反编译导出（即使没有MonoScript）
+		if (dllList != null && dllList.Count > 0)
+		{
+			// 获取所有已收集的脚本对应的DLL名
+			var collectedDlls = new HashSet<string>(
+				collections
+					.OfType<AssetRipper.Export.UnityProjects.Scripts.ScriptExportCollection>()
+					.SelectMany(c => c.Assets)
+					.OfType<AssetRipper.SourceGenerated.Classes.ClassID_115.IMonoScript>()
+					.Select(s => s.GetAssemblyNameFixed() + ".dll"),
+				StringComparer.OrdinalIgnoreCase);
+
+			// 获取所有可用的Assembly
+			var allAssemblies = _assemblyManager.GetAssemblies().ToList();
+			foreach (var dll in dllList)
+			{
+				if (!collectedDlls.Contains(dll))
+				{
+					var asmName = dll.Substring(0, dll.Length - 4); // 去掉.dll
+					var assembly = allAssemblies.FirstOrDefault(a => string.Equals(a.Name, asmName, StringComparison.OrdinalIgnoreCase));
+					if (assembly != null)
+					{
+						// 构造一个空的MonoScript集合，强制创建ScriptExportCollection
+						var scriptExporter = assetExporterStack.GetHandlerStack(typeof(AssetRipper.SourceGenerated.Classes.ClassID_115.IMonoScript))
+							.OfType<AssetRipper.Export.UnityProjects.Scripts.ScriptExporter>().FirstOrDefault();
+						if (scriptExporter != null)
+						{
+							if (scriptExporter.TryCreateCollection(null, out IExportCollection? collection, dllList))
+							{
+								collections.Add(collection);
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// 补充：确保所有ScriptExporter都设置白名单，强制Decompile
+		if (dllList != null && dllList.Count > 0)
+		{
+			foreach (var exporter in assetExporterStack.GetHandlerStack(typeof(AssetRipper.SourceGenerated.Classes.ClassID_115.IMonoScript)))
+			{
+				if (exporter is AssetRipper.Export.UnityProjects.Scripts.ScriptExporter scriptExporter)
+				{
+					scriptExporter.SetForceDecompileDlls(dllList);
+				}
 			}
 		}
 

@@ -46,7 +46,7 @@ public static class GameFileLoader
 		GameData = ExportHandler.LoadAndProcess(paths);
 	}
 
-	public static void ExportUnityProject(string path)
+	public static void ExportUnityProject(string path, IEnumerable<string>? dllNames)
 	{
 		if (IsLoaded && IsValidExportDirectory(path))
 		{
@@ -54,9 +54,11 @@ public static class GameFileLoader
 			{
 				Directory.Delete(path, true);
 			}
-
 			Directory.CreateDirectory(path);
-			ExportHandler.Export(GameData, path);
+			// 统一dllNames为List<string>或null
+			List<string>? dllList = dllNames?.ToList();
+			ExportHandler.Export(GameData, path, dllList);
+			WebApplicationLauncher.OpenUrl(path); // 导出后自动打开目录
 		}
 	}
 
@@ -75,6 +77,34 @@ public static class GameFileLoader
 			Settings.ExportRootPath = path;
 			PrimaryContentExporter.CreateDefault(GameData).Export(GameBundle, Settings, LocalFileSystem.Instance);
 			Logger.Info(LogCategory.Export, "Finished exporting primary content.");
+		}
+	}
+
+	public static void ExportSelectedDlls(IEnumerable<string> dllNames, string path)
+	{
+		if (!IsLoaded || dllNames is null)
+		{
+			return;
+		}
+		if (Directory.Exists(path))
+		{
+			Directory.Delete(path, true);
+		}
+		Directory.CreateDirectory(path);
+		foreach (var assembly in AssemblyManager.GetAssemblies())
+		{
+			string dllName = assembly.Name + ".dll";
+			if (dllNames.Contains(dllName))
+			{
+				var stream = AssemblyManager.GetStreamForAssembly(assembly);
+				stream.Position = 0;
+				string outPath = System.IO.Path.Combine(path, dllName);
+				using (var fileStream = File.Create(outPath))
+				{
+					stream.CopyTo(fileStream);
+					stream.Position = 0;
+				}
+			}
 		}
 	}
 

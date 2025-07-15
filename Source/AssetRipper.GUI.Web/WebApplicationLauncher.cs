@@ -263,6 +263,9 @@ public static class WebApplicationLauncher
 		app.MapPost("/Export/PrimaryContent", Commands.HandleCommand<Commands.ExportPrimaryContent>)
 			.AcceptsFormDataContainingPath()
 			.Produces(StatusCodes.Status302Found);
+		app.MapPost("/Export/SelectedDlls", Commands.HandleCommand<Commands.ExportSelectedDlls>)
+			.AcceptsFormDataContainingPath()
+			.Produces(StatusCodes.Status302Found);
 		app.MapPost("/LoadFile", Commands.HandleCommand<Commands.LoadFile>)
 			.AcceptsFormDataContainingPath()
 			.Produces(StatusCodes.Status302Found);
@@ -368,7 +371,7 @@ public static class WebApplicationLauncher
 		}
 	}
 
-	private static void OpenUrl(string url)
+	public static void OpenUrl(string url)
 	{
 		try
 		{

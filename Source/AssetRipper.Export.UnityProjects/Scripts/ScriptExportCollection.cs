@@ -13,8 +13,11 @@ using System.Diagnostics;
 namespace AssetRipper.Export.UnityProjects.Scripts;
 public sealed class ScriptExportCollection : ScriptExportCollectionBase
 {
-	public ScriptExportCollection(ScriptExporter assetExporter, IMonoScript firstScript) : base(assetExporter, firstScript)
+	private readonly HashSet<string>? _dllWhiteList;
+
+	public ScriptExportCollection(ScriptExporter assetExporter, IMonoScript firstScript, IEnumerable<string>? dllWhiteList = null) : base(assetExporter, firstScript)
 	{
+		_dllWhiteList = dllWhiteList != null ? new HashSet<string>(dllWhiteList) : null;
 		Debug.Assert(assetExporter.AssemblyManager.IsSet);
 
 		// find copies in whole project and skip them
@@ -60,9 +63,20 @@ public sealed class ScriptExportCollection : ScriptExportCollectionBase
 
 		string pluginsFolder = fileSystem.Path.Join(assetsDirectoryPath, "Plugins");
 
+		Logger.Info(LogCategory.Export, $"DLL白名单: {(_dllWhiteList != null ? string.Join(", ", _dllWhiteList) : "全部")}");
+		if (_dllWhiteList != null)
+		{
+			Logger.Info(LogCategory.Export, $"将要反编译的DLL: {string.Join(", ", _dllWhiteList)}");
+		}
 		foreach (AssemblyDefinition assembly in AssetExporter.AssemblyManager.GetAssemblies())
 		{
 			string assemblyName = assembly.Name!;
+			if (_dllWhiteList != null && !_dllWhiteList.Contains(assemblyName + ".dll", StringComparer.OrdinalIgnoreCase))
+			{
+				Logger.Debug(LogCategory.Export, $"跳过DLL: {assemblyName}.dll (不在白名单)");
+				continue;
+			}
+			Logger.Debug(LogCategory.Export, $"导出DLL: {assemblyName}.dll");
 			AssemblyExportType exportType = AssetExporter.GetExportType(assemblyName);
 
 			if (exportType is AssemblyExportType.Decompile)

@@ -105,7 +105,7 @@ public class ExportHandler
 		ProjectExporter projectExporter = new(Settings, gameData.AssemblyManager);
 		BeforeExport(projectExporter);
 		projectExporter.DoFinalOverrides(Settings);
-		projectExporter.Export(gameData.GameBundle, Settings, fileSystem);
+		projectExporter.Export(gameData.GameBundle, Settings, fileSystem, null);
 
 		Logger.Info(LogCategory.Export, "Finished exporting assets");
 
@@ -114,15 +114,44 @@ public class ExportHandler
 			postExporter.DoPostExport(gameData, Settings, fileSystem);
 		}
 		Logger.Info(LogCategory.Export, "Finished post-export");
+	}
 
-		static string GetListOfVersions(GameBundle gameBundle)
+	private static string GetListOfVersions(GameBundle gameBundle)
+	{
+		return string.Join(' ', gameBundle
+			.FetchAssetCollections()
+			.Select(c => c.Version)
+			.Distinct()
+			.Select(v => v.ToString()));
+	}
+
+	public void Export(GameData gameData, string outputPath, IEnumerable<string>? dllNames)
+	{
+		Export(gameData, outputPath, LocalFileSystem.Instance, dllNames);
+	}
+
+	public void Export(GameData gameData, string outputPath, FileSystem fileSystem, IEnumerable<string>? dllNames)
+	{
+		Logger.Info(LogCategory.Export, "Starting export");
+		Logger.Info(LogCategory.Export, $"Attempting to export assets to {outputPath}...");
+		Logger.Info(LogCategory.Export, $"Game files have these Unity versions:{GetListOfVersions(gameData.GameBundle)}");
+		Logger.Info(LogCategory.Export, $"Exporting to Unity version {gameData.ProjectVersion}");
+
+		Settings.ExportRootPath = outputPath;
+		Settings.SetProjectSettings(gameData.ProjectVersion);
+
+		ProjectExporter projectExporter = new(Settings, gameData.AssemblyManager);
+		BeforeExport(projectExporter);
+		projectExporter.DoFinalOverrides(Settings);
+		projectExporter.Export(gameData.GameBundle, Settings, fileSystem, dllNames);
+
+		Logger.Info(LogCategory.Export, "Finished exporting assets");
+
+		foreach (IPostExporter postExporter in GetPostExporters())
 		{
-			return string.Join(' ', gameBundle
-				.FetchAssetCollections()
-				.Select(c => c.Version)
-				.Distinct()
-				.Select(v => v.ToString()));
+			postExporter.DoPostExport(gameData, Settings, fileSystem);
 		}
+		Logger.Info(LogCategory.Export, "Finished post-export");
 	}
 
 	protected virtual void BeforeExport(ProjectExporter projectExporter)
